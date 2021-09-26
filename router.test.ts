@@ -47,6 +47,19 @@ async function testHandleRequest(
 }
 
 Deno.test({
+  name: "does not allow a user to re-use the same segment name",
+  fn() {
+    assertThrows(
+      () => {
+        Pattern.tryParse("/{foo}/{foo}");
+      },
+      PatternParseError,
+      "foo was declared multiple times"
+    );
+  },
+});
+
+Deno.test({
   name: "throws errors on unterminated segments",
   fn() {
     assertThrows(

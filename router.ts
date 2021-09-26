@@ -48,6 +48,10 @@ export class PatternParseError extends Error {
     }
   }
 
+  static repeatSegmentName(name: string): PatternParseError {
+    return new PatternParseError(`${name} was declared multiple times`);
+  }
+
   static parameterMismatch(
     pattern: Pattern,
     expected: number,
@@ -74,27 +78,34 @@ export class PatternParseError extends Error {
 }
 
 export class Pattern {
-  #original: Patternish;
   #segments: PatternSegment[];
 
   static tryParse(patternish: Patternish): Pattern | never {
+    const names = new Set();
     const segments: PatternSegment[] = [];
     const parts = patternish.split("/");
     for (let i = 0; i < parts.length; i++) {
-      // If there's a leading slash, then the
       const part = parts[i];
       const result = this.#tryParseSegment(part);
-      if (result === "passthrough") {
+      if (typeof result !== "string") {
+        if (names.has(result.name)) {
+          throw PatternParseError.repeatSegmentName(result.name);
+        }
+
+        names.add(result.name);
         segments.push(result);
-      } else if (typeof result === "string") {
-        throw PatternParseError.failedToParseSegment(result, patternish, i);
-      } else {
-        // Must have been okay!
-        segments.push(result);
+      }
+
+      switch (result) {
+        case "passthrough":
+          segments.push(result);
+          break;
+        case "unterminated-segment":
+          throw PatternParseError.unterminatedSegment(patternish, i);
       }
     }
 
-    return new Pattern(patternish, segments);
+    return new Pattern(segments);
   }
 
   static #tryParseSegment(segment: string): PatternSegment | FailReason {
@@ -111,8 +122,7 @@ export class Pattern {
     return { type: "string", name: segment.slice(1, segment.length - 1) };
   }
 
-  private constructor(original: Patternish, segments: PatternSegment[]) {
-    this.#original = original;
+  private constructor(segments: PatternSegment[]) {
     this.#segments = segments;
   }
 
