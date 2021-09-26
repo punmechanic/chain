@@ -80,6 +80,9 @@ export class Route {
 /**
  * A router similar to express' Router.
  *
+ * The following have different semantics - *order matters*.
+ *
+ * ```ts
  * router.use(middlewareA);
  * router.get('/', handler);
  * router.use(middlewareB);
