@@ -37,6 +37,10 @@ export class Pattern {
   static tryParse(_patternish: Patternish): Pattern | never {
     return new Pattern();
   }
+
+  match(_url: URL): Map<string, string> {
+    return new Map();
+  }
 }
 
 export type Verb = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -52,8 +56,14 @@ export class Route {
     this.#middlewares = middlewares;
   }
 
+  matches(_req: Request): boolean {
+    return false;
+  }
+
   middleware(): Middleware {
-    return (next) => (req, info, ctx) => next(req, info, ctx);
+    return (next) => (req, info, ctx) => {
+      return next(req, info, ctx);
+    };
   }
 }
 
@@ -94,6 +104,10 @@ export class Router {
 
   get(path: Patternish, ...middlewares: Middleware[]) {
     this.#route("GET", path, ...middlewares);
+  }
+
+  post(path: Patternish, ...middlewares: Middleware[]) {
+    this.#route("POST", path, ...middlewares);
   }
 
   handler(): Handler {
