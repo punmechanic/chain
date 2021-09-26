@@ -33,12 +33,55 @@ export type Middleware = (next: RouteHandler) => RouteHandler;
 
 export type Patternish = string;
 
+type PatternSegment = "passthrough" | { type: string; name: string };
+type FailReason = "unterminated-segment";
+
+export class PatternParseError extends Error {
+  constructor(msg: string, pattern: Patternish) {
+    super(`${msg} in pattern ${pattern}`);
+  }
+}
+
 export class Pattern {
-  static tryParse(_patternish: Patternish): Pattern | never {
-    return new Pattern();
+  #segments: PatternSegment[];
+
+  static tryParse(patternish: Patternish): Pattern | never {
+    const segments: PatternSegment[] = [];
+    const parts = patternish.split("/");
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      const result = this.#tryParseSegment(part);
+      switch (result) {
+        case "unterminated-segment":
+          throw new PatternParseError(
+            `segment ${i + 1} was unterminated`,
+            patternish
+          );
+        default:
+          segments.push(result);
+      }
+    }
+
+    return new Pattern(segments);
   }
 
-  match(_url: URL): Map<string, string> {
+  static #tryParseSegment(segment: string): PatternSegment | FailReason {
+    if (segment[0] !== "{") {
+      return "passthrough";
+    }
+
+    if (segment[segment.length - 1] === "}") {
+      return "unterminated-segment";
+    }
+
+    throw new Error();
+  }
+
+  private constructor(segments: PatternSegment[]) {
+    this.#segments = segments;
+  }
+
+  extractVars(_url: URL): Map<string, string> {
     return new Map();
   }
 }
