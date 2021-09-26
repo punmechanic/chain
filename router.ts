@@ -1,7 +1,4 @@
-import type {
-  Handler,
-  ConnInfo,
-} from "https://deno.land/std@0.108.0/http/mod.ts";
+import type { Handler } from "https://deno.land/std@0.108.0/http/mod.ts";
 import {
   Patternish,
   Pattern,
@@ -9,69 +6,10 @@ import {
   parse as parsePattern,
   extractVars,
 } from "./pattern-match.ts";
-
-type ContextKey = string | symbol;
-export class Context {
-  #values: Map<ContextKey, unknown> = new Map();
-
-  clone(): Context {
-    const next = new Context();
-    next.#values = new Map(this.#values);
-    return next;
-  }
-
-  withValue(key: ContextKey, value: unknown): Context {
-    const next = this.clone();
-    next.#values.set(key, value);
-    return next;
-  }
-
-  value(key: ContextKey): unknown {
-    return this.#values.get(key);
-  }
-}
-
-const EMPTY_VARS = new Map();
-const CTX_KEY_ROUTE_VARS = Symbol("route vars");
-
-export type RouteVars = Map<string, string>;
-
-function applyRouteVars(ctx: Context, vars: RouteVars): Context {
-  return ctx.withValue(CTX_KEY_ROUTE_VARS, vars);
-}
-
-export function routeVars(ctx: Context): RouteVars {
-  const maybeVars = ctx.value(CTX_KEY_ROUTE_VARS) as
-    | Map<string, string>
-    | undefined;
-
-  return maybeVars ?? EMPTY_VARS;
-}
-
-export type RouteHandler = (
-  request: Request,
-  connInfo: ConnInfo,
-  context: Context
-) => Response | Promise<Response>;
-
-export type Middleware = (next: RouteHandler) => RouteHandler;
-
-function composeMiddlewares(middlewares: Middleware[]): Middleware {
-  // Clone to prevent modification
-  middlewares = [...middlewares];
-  return (next) => {
-    // We need to construct a function that calls all of the middlewares in reverse order.
-    // This is because in order to call middleware A, we need to know what the 'next' middleware is (all the way to the end of the chain).
-    for (let i = middlewares.length - 1; i >= 0; i--) {
-      const middleware = middlewares[i];
-      next = middleware(next);
-    }
-
-    return next;
-  };
-}
-
-export type Verb = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+import { Middleware, composeMiddlewares, RouteHandler } from "./middleware.ts";
+import type { Verb } from "./shared.ts";
+import { applyRouteVars } from "./vars.ts";
+import { Context } from "./context.ts";
 
 export class Route {
   #verb: Verb;

@@ -1,5 +1,4 @@
-import { Route, Router, Middleware, routeVars } from "./router.ts";
-import { parse as parsePattern } from "./pattern-match.ts";
+import { Router, routeVars, Middleware } from "./mod.ts";
 import type { ConnInfo } from "https://deno.land/std@0.108.0/http/mod.ts";
 import { assertEquals } from "https://deno.land/std@0.108.0/testing/asserts.ts";
 
@@ -48,29 +47,6 @@ async function testHandleRequest(
   const handle = router.handler();
   return await handle(request, {} as unknown as ConnInfo);
 }
-
-Deno.test({
-  name: "Routes match against requests",
-  fn() {
-    const route = new Route("GET", parsePattern("/{foo}"), []);
-    let uri = new URL("/1234", TEST_BASE_URL);
-    let req = new Request(uri.href, {
-      method: "get",
-    });
-    assertEquals(route.matches(req), true, "failed pattern test");
-
-    req = new Request(uri.href, {
-      method: "post",
-    });
-    assertEquals(route.matches(req), false, "failed method tes");
-
-    uri = new URL("/1234/5567", TEST_BASE_URL);
-    req = new Request(uri.href, {
-      method: "get",
-    });
-    assertEquals(route.matches(req), false, "failed nested pattern test");
-  },
-});
 
 Deno.test({
   name: "can handle simple GET requests",
