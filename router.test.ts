@@ -1,4 +1,4 @@
-import { Route, Router, Middleware } from "./router.ts";
+import { Route, Router, Middleware, routeVars } from "./router.ts";
 import { parse as parsePattern } from "./pattern-match.ts";
 import type { ConnInfo } from "https://deno.land/std@0.108.0/http/mod.ts";
 import { assertEquals } from "https://deno.land/std@0.108.0/testing/asserts.ts";
@@ -22,8 +22,19 @@ const readValueToBodyMiddleware: Middleware = (_next) => {
 };
 
 const dumpInfoMiddleware: Middleware = (_next) => {
-  return (req) => {
-    const body = `${req.method} ${req.url}`;
+  return (req, _info, ctx) => {
+    const strings = [`${req.method} ${req.url}`];
+    const vars = routeVars(ctx);
+    if (vars.size > 0) {
+      const params = new URLSearchParams();
+      for (const [k, v] of vars) {
+        params.set(k, v);
+      }
+
+      strings.push(params.toString());
+    }
+
+    const body = strings.join("\n");
     return new Response(body, {
       headers: [["content-type", "text/plain; encoding=utf8"]],
     });

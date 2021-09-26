@@ -2,16 +2,16 @@ import type {
   Handler,
   ConnInfo,
 } from "https://deno.land/std@0.108.0/http/mod.ts";
-import { Patternish, Pattern, parse as parsePattern } from "./pattern-match.ts";
+import {
+  Patternish,
+  Pattern,
+  parse as parsePattern,
+  extractVars,
+} from "./pattern-match.ts";
 
-export type RouteHandler = (
-  request: Request,
-  connInfo: ConnInfo,
-  context: Context
-) => Response | Promise<Response>;
-
+type ContextKey = string | symbol;
 export class Context {
-  #values: Map<string, unknown> = new Map();
+  #values: Map<ContextKey, unknown> = new Map();
 
   clone(): Context {
     const next = new Context();
@@ -19,16 +19,39 @@ export class Context {
     return next;
   }
 
-  withValue(key: string, value: unknown): Context {
+  withValue(key: ContextKey, value: unknown): Context {
     const next = this.clone();
     next.#values.set(key, value);
     return next;
   }
 
-  value(key: string): unknown {
+  value(key: ContextKey): unknown {
     return this.#values.get(key);
   }
 }
+
+const EMPTY_VARS = new Map();
+const CTX_KEY_ROUTE_VARS = Symbol("route vars");
+
+export type RouteVars = Map<string, string>;
+
+function applyRouteVars(ctx: Context, vars: RouteVars): Context {
+  return ctx.withValue(CTX_KEY_ROUTE_VARS, vars);
+}
+
+export function routeVars(ctx: Context): RouteVars {
+  const maybeVars = ctx.value(CTX_KEY_ROUTE_VARS) as
+    | Map<string, string>
+    | undefined;
+
+  return maybeVars ?? EMPTY_VARS;
+}
+
+export type RouteHandler = (
+  request: Request,
+  connInfo: ConnInfo,
+  context: Context
+) => Response | Promise<Response>;
 
 export type Middleware = (next: RouteHandler) => RouteHandler;
 
@@ -69,6 +92,9 @@ export class Route {
     const happyPath = composeMiddlewares(this.#middlewares);
     return (noMatchPath) => (req, info, ctx) => {
       if (this.matches(req)) {
+        // TODO: is there ever a situation where req.url might not be convertible to URL?
+        const vars = extractVars(this.#pattern, new URL(req.url));
+        ctx = applyRouteVars(ctx, vars);
         return happyPath(noMatchPath)(req, info, ctx);
       }
 

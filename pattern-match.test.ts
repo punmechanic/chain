@@ -29,7 +29,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "Pattern can extract vars",
+  name: "can extract vars",
   fn() {
     const pattern = parse("/{foo}/{bar}/{baz}");
     const url = new URL("/a/b/c", TEST_BASE_URL);
