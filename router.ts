@@ -43,6 +43,21 @@ export class Pattern {
   }
 }
 
+function composeMiddlewares(middlewares: Middleware[]): Middleware {
+  // Clone to prevent modification
+  middlewares = [...middlewares];
+  return (next) => {
+    // We need to construct a function that calls all of the middlewares in reverse order.
+    // This is because in order to call middleware A, we need to know what the 'next' middleware is (all the way to the end of the chain).
+    for (let i = middlewares.length - 1; i >= 0; i--) {
+      const middleware = middlewares[i];
+      next = middleware(next);
+    }
+
+    return next;
+  };
+}
+
 export type Verb = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export class Route {
@@ -56,13 +71,19 @@ export class Route {
     this.#middlewares = middlewares;
   }
 
-  matches(_req: Request): boolean {
-    return false;
+  matches(req: Request): boolean {
+    return req.method === this.#verb;
   }
 
   middleware(): Middleware {
-    return (next) => (req, info, ctx) => {
-      return next(req, info, ctx);
+    // This is messy which probably indicates we should change our design.
+    const happyPath = composeMiddlewares(this.#middlewares);
+    return (noMatchPath) => (req, info, ctx) => {
+      if (this.matches(req)) {
+        return happyPath(noMatchPath)(req, info, ctx);
+      }
+
+      return noMatchPath(req, info, ctx);
     };
   }
 }
@@ -70,8 +91,6 @@ export class Route {
 /**
  * A router similar to express' Router.
  *
- * The order in which middleware
-/**
  * router.use(middlewareA);
  * router.get('/', handler);
  * router.use(middlewareB);
@@ -86,6 +105,17 @@ export class Route {
  */
 export class Router {
   #middlewares: Middleware[] = [];
+  #unhandledRequestStrategy: RouteHandler = (_req, _connInfo) => {
+    // TODO: If we ever reach the last chain it means nothing in the chain handled our request.
+    // Probably a good idea to 404, but default behaviour is to 200.
+    return new Response();
+  };
+
+  constructor(unhandledRequestStrategy?: RouteHandler) {
+    if (unhandledRequestStrategy) {
+      this.#unhandledRequestStrategy = unhandledRequestStrategy;
+    }
+  }
 
   #route(verb: Verb, path: Patternish, ...middlewares: Middleware[]) {
     const pattern = Pattern.tryParse(path);
@@ -111,31 +141,11 @@ export class Router {
   }
 
   handler(): Handler {
-    const middleware = this.middleware();
+    const middleware = composeMiddlewares(this.#middlewares);
     return (req, connInfo) => {
-      // TODO: If we ever reach the last chain it means nothing in the chain handled our request.
-      // Probably a good idea to 404, but default behaviour is to 200.
-      const handler = middleware((_req, _connInfo) => {
-        return new Response();
-      });
-
+      const handler = middleware(this.#unhandledRequestStrategy);
       const ctx = new Context();
       return handler(req, connInfo, ctx);
-    };
-  }
-
-  middleware(): Middleware {
-    // Create a copy so a user cannot modify the middleware chain after this has been returned
-    const middlewares = [...this.#middlewares];
-    return (next) => {
-      // We need to construct a function that calls all of the middlewares in reverse order.
-      // This is because in order to call middleware A, we need to know what the 'next' middleware is (all the way to the end of the chain).
-      for (let i = middlewares.length - 1; i >= 0; i--) {
-        const middleware = middlewares[i];
-        next = middleware(next);
-      }
-
-      return next;
     };
   }
 }
