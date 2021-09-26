@@ -37,52 +37,106 @@ type PatternSegment = "passthrough" | { type: string; name: string };
 type FailReason = "unterminated-segment";
 
 export class PatternParseError extends Error {
-  constructor(msg: string, pattern: Patternish) {
-    super(`${msg} in pattern ${pattern}`);
+  static failedToParseSegment(
+    failReason: FailReason,
+    patternish: Patternish,
+    idx: number
+  ): PatternParseError {
+    switch (failReason) {
+      case "unterminated-segment":
+        return PatternParseError.unterminatedSegment(patternish, idx);
+    }
+  }
+
+  static parameterMismatch(
+    pattern: Pattern,
+    expected: number,
+    found: number
+  ): PatternParseError {
+    return new PatternParseError(
+      `URL had ${found} parts, but ${pattern.toString()} only has ${expected}`
+    );
+  }
+
+  static unterminatedSegment(
+    patternish: Patternish,
+    idx: number
+  ): PatternParseError {
+    if (patternish[0] !== "/") {
+      // If there's no leading slash, we need to increment the segment "number" for the error msg to make sense.
+      idx++;
+    }
+
+    return new PatternParseError(
+      `segment ${idx} was unterminated in pattern ${patternish}`
+    );
   }
 }
 
 export class Pattern {
+  #original: Patternish;
   #segments: PatternSegment[];
 
   static tryParse(patternish: Patternish): Pattern | never {
     const segments: PatternSegment[] = [];
     const parts = patternish.split("/");
     for (let i = 0; i < parts.length; i++) {
+      // If there's a leading slash, then the
       const part = parts[i];
       const result = this.#tryParseSegment(part);
-      switch (result) {
-        case "unterminated-segment":
-          throw new PatternParseError(
-            `segment ${i + 1} was unterminated`,
-            patternish
-          );
-        default:
-          segments.push(result);
+      if (result === "passthrough") {
+        segments.push(result);
+      } else if (typeof result === "string") {
+        throw PatternParseError.failedToParseSegment(result, patternish, i);
+      } else {
+        // Must have been okay!
+        segments.push(result);
       }
     }
 
-    return new Pattern(segments);
+    return new Pattern(patternish, segments);
   }
 
   static #tryParseSegment(segment: string): PatternSegment | FailReason {
-    if (segment[0] !== "{") {
+    const firstChar = segment[0];
+    const lastChar = segment[segment.length - 1];
+    if (firstChar !== "{") {
       return "passthrough";
     }
 
-    if (segment[segment.length - 1] === "}") {
+    if (firstChar === "{" && lastChar !== "}") {
       return "unterminated-segment";
     }
 
-    throw new Error();
+    return { type: "string", name: segment.slice(1, segment.length - 1) };
   }
 
-  private constructor(segments: PatternSegment[]) {
+  private constructor(original: Patternish, segments: PatternSegment[]) {
+    this.#original = original;
     this.#segments = segments;
   }
 
-  extractVars(_url: URL): Map<string, string> {
-    return new Map();
+  extractVars(url: URL): Map<string, string> {
+    const vars = new Map();
+    const parts = url.pathname.split("/");
+    if (parts.length !== this.#segments.length) {
+      throw PatternParseError.parameterMismatch(
+        this,
+        this.#segments.length,
+        parts.length
+      );
+    }
+
+    for (let i = 0; i < this.#segments.length; i++) {
+      const seg = this.#segments[i];
+      if (seg === "passthrough") {
+        continue;
+      }
+
+      vars.set(seg.name, parts[i]);
+    }
+
+    return vars;
   }
 }
 
