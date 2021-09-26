@@ -2,6 +2,7 @@ import type {
   Handler,
   ConnInfo,
 } from "https://deno.land/std@0.108.0/http/mod.ts";
+import { Patternish, Pattern, parse as parsePattern } from "./pattern-match.ts";
 
 export type RouteHandler = (
   request: Request,
@@ -30,125 +31,6 @@ export class Context {
 }
 
 export type Middleware = (next: RouteHandler) => RouteHandler;
-
-export type Patternish = string;
-
-type PatternSegment = "passthrough" | { type: string; name: string };
-type FailReason = "unterminated-segment";
-
-export class PatternParseError extends Error {
-  static failedToParseSegment(
-    failReason: FailReason,
-    patternish: Patternish,
-    idx: number
-  ): PatternParseError {
-    switch (failReason) {
-      case "unterminated-segment":
-        return PatternParseError.unterminatedSegment(patternish, idx);
-    }
-  }
-
-  static repeatSegmentName(name: string): PatternParseError {
-    return new PatternParseError(`${name} was declared multiple times`);
-  }
-
-  static parameterMismatch(
-    pattern: Pattern,
-    expected: number,
-    found: number
-  ): PatternParseError {
-    return new PatternParseError(
-      `URL had ${found} parts, but ${pattern.toString()} only has ${expected}`
-    );
-  }
-
-  static unterminatedSegment(
-    patternish: Patternish,
-    idx: number
-  ): PatternParseError {
-    if (patternish[0] !== "/") {
-      // If there's no leading slash, we need to increment the segment "number" for the error msg to make sense.
-      idx++;
-    }
-
-    return new PatternParseError(
-      `segment ${idx} was unterminated in pattern ${patternish}`
-    );
-  }
-}
-
-export class Pattern {
-  #segments: PatternSegment[];
-
-  static tryParse(patternish: Patternish): Pattern | never {
-    const names = new Set();
-    const segments: PatternSegment[] = [];
-    const parts = patternish.split("/");
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-      const result = this.#tryParseSegment(part);
-      if (typeof result !== "string") {
-        if (names.has(result.name)) {
-          throw PatternParseError.repeatSegmentName(result.name);
-        }
-
-        names.add(result.name);
-        segments.push(result);
-      }
-
-      switch (result) {
-        case "passthrough":
-          segments.push(result);
-          break;
-        case "unterminated-segment":
-          throw PatternParseError.unterminatedSegment(patternish, i);
-      }
-    }
-
-    return new Pattern(segments);
-  }
-
-  static #tryParseSegment(segment: string): PatternSegment | FailReason {
-    const firstChar = segment[0];
-    const lastChar = segment[segment.length - 1];
-    if (firstChar !== "{") {
-      return "passthrough";
-    }
-
-    if (firstChar === "{" && lastChar !== "}") {
-      return "unterminated-segment";
-    }
-
-    return { type: "string", name: segment.slice(1, segment.length - 1) };
-  }
-
-  private constructor(segments: PatternSegment[]) {
-    this.#segments = segments;
-  }
-
-  extractVars(url: URL): Map<string, string> {
-    const vars = new Map();
-    const parts = url.pathname.split("/");
-    if (parts.length !== this.#segments.length) {
-      throw PatternParseError.parameterMismatch(
-        this,
-        this.#segments.length,
-        parts.length
-      );
-    }
-
-    for (let i = 0; i < this.#segments.length; i++) {
-      const seg = this.#segments[i];
-      if (seg === "passthrough") {
-        continue;
-      }
-
-      vars.set(seg.name, parts[i]);
-    }
-
-    return vars;
-  }
-}
 
 function composeMiddlewares(middlewares: Middleware[]): Middleware {
   // Clone to prevent modification
@@ -225,7 +107,7 @@ export class Router {
   }
 
   #route(verb: Verb, path: Patternish, ...middlewares: Middleware[]) {
-    const pattern = Pattern.tryParse(path);
+    const pattern = parsePattern(path);
     const route = new Route(verb, pattern, middlewares);
     const middleware = route.middleware();
     this.#middlewares.push(middleware);

@@ -1,15 +1,7 @@
-import {
-  Pattern,
-  Route,
-  Router,
-  Middleware,
-  PatternParseError,
-} from "./router.ts";
+import { Route, Router, Middleware } from "./router.ts";
+import { parse as parsePattern } from "./pattern-match.ts";
 import type { ConnInfo } from "https://deno.land/std@0.108.0/http/mod.ts";
-import {
-  assertEquals,
-  assertThrows,
-} from "https://deno.land/std@0.108.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.108.0/testing/asserts.ts";
 
 const TEST_BASE_URL = new URL("http://example.com");
 
@@ -47,48 +39,9 @@ async function testHandleRequest(
 }
 
 Deno.test({
-  name: "does not allow a user to re-use the same segment name",
-  fn() {
-    assertThrows(
-      () => {
-        Pattern.tryParse("/{foo}/{foo}");
-      },
-      PatternParseError,
-      "foo was declared multiple times"
-    );
-  },
-});
-
-Deno.test({
-  name: "throws errors on unterminated segments",
-  fn() {
-    assertThrows(
-      () => {
-        Pattern.tryParse("/{foo}/{bar/baz");
-      },
-      PatternParseError,
-      "segment 2 was unterminated in pattern /{foo}/{bar/baz"
-    );
-  },
-});
-
-Deno.test({
-  name: "Pattern can extract vars",
-  fn() {
-    const pattern = Pattern.tryParse("/{foo}/{bar}/{baz}");
-    const url = new URL("/a/b/c", TEST_BASE_URL);
-    const vars = pattern.extractVars(url);
-    assertEquals(vars.get("foo"), "a");
-    assertEquals(vars.get("bar"), "b");
-    assertEquals(vars.get("baz"), "c");
-  },
-});
-
-Deno.test({
   name: "Routes match against requests",
   fn() {
-    const pattern = Pattern.tryParse("/{foo}");
-    const route = new Route("GET", pattern, []);
+    const route = new Route("GET", parsePattern("/{foo}"), []);
     let uri = new URL("/1234", TEST_BASE_URL);
     let req = new Request(uri.href, {
       method: "get",
