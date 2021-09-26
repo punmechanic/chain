@@ -41,6 +41,24 @@ export class PatternParseError extends Error {
   }
 }
 
+/**
+ * Quickly determine if the URL given suitably matches the URL.
+ * This is separate from extractVars, as we're not interested in actually collecting vars, which means that we can take a faster path here.
+ *
+ * @param pattern The pattern
+ * @param url The URL
+ */
+export function fastMatch(pattern: Pattern, url: URL): boolean {
+  // If we wanted to support greedy matching, or some kind of regular expression in URLs
+  // the implementation of this would have to become more complicated
+  const parts = url.pathname.split("/");
+  if (parts.length !== pattern.length) {
+    return false;
+  }
+
+  return true;
+}
+
 export function extractVars(pattern: Pattern, url: URL): Map<string, string> {
   const vars = new Map();
   const parts = url.pathname.split("/");

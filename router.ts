@@ -5,6 +5,7 @@ import type {
 import {
   Patternish,
   Pattern,
+  fastMatch as fastMatchPattern,
   parse as parsePattern,
   extractVars,
 } from "./pattern-match.ts";
@@ -84,7 +85,11 @@ export class Route {
   }
 
   matches(req: Request): boolean {
-    return req.method === this.#verb;
+    if (req.method !== this.#verb) {
+      return false;
+    }
+
+    return fastMatchPattern(this.#pattern, new URL(req.url));
   }
 
   middleware(): Middleware {
